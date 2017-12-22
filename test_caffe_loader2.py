@@ -9,7 +9,7 @@ from torch.nn.parameter import Parameter
 import time
 
 def create_network(protofile, weightfile):
-    net = CaffeNet(protofile, omit_data_layer=False)
+    net = CaffeNet(protofile)
     if args.cuda:
         net.cuda()
     print(net)

@@ -16,6 +16,10 @@ from torch.legacy.nn import SpatialCrossMapLRN as SpatialCrossMapLRNOld
 from itertools import product as product
 from detection import Detection, MultiBoxLoss
 
+SUPPORTED_LAYERS = ['Data', 'AnnotatedData', 'Pooling', 'Eltwise', 'ReLU', 
+                    'Permute', 'Flatten', 'Slice', 'Concat', 'Softmax', 'SoftmaxWithLoss', 
+                    'LRN', 'Dropout', 'Reshape', 'PriorBox', 'DetectionOutput']
+
 class CaffeData(nn.Module):
     def __init__(self, layer):
         super(CaffeData, self).__init__()
@@ -179,6 +183,16 @@ class Softmax(nn.Module):
         x = x.view(*orig_size)
         return x
 
+class SoftmaxWithLoss(nn.CrossEntropyLoss):
+    def __init__(self):
+        super(SoftmaxWithLoss, self).__init__()
+    def __repr__(self):
+        return 'SoftmaxWithLoss()'
+    def forward(self, input, targets):
+        targets = targets.long()
+        return nn.CrossEntropyLoss.forward(self, input, targets)
+
+
 class Normalize(nn.Module):
     def __init__(self,n_channels, scale=1.0):
         super(Normalize,self).__init__()
@@ -262,6 +276,20 @@ class Reshape(nn.Module):
         
         return x.view(*new_dims).contiguous()
 
+class Accuracy(nn.Module):
+    def __init__(self):
+        super(Accuracy, self).__init__()
+    def __repr__(self):
+        return 'Accuracy()'
+    def forward(self, output, label):
+        max_vals, max_ids = output.data.max(1)
+        n_correct = (max_ids.view(-1).float() == label.data).sum()
+        batchsize = output.data.size(0)
+        accuracy = float(n_correct)/batchsize
+        accuracy = torch.FloatTensor([accuracy]).type_as(output.data)
+        return Variable(accuracy)
+
+
 class PriorBox(nn.Module):
     """Compute priorbox coordinates in center-offset form for each source
     feature map.
@@ -330,11 +358,12 @@ class PriorBox(nn.Module):
             return Variable(output)
 
 class CaffeNet(nn.Module):
-    def __init__(self, protofile, width=None, height=None, omit_data_layer=True):
+    def __init__(self, protofile, width=None, height=None, channels=None, omit_data_layer=False, phase='TRAIN'):
         super(CaffeNet, self).__init__()
-        self.net_info = parse_prototxt(protofile)
         self.omit_data_layer = omit_data_layer
-        self.models = self.create_network(self.net_info, width, height)
+        self.phase = phase
+        self.net_info = parse_prototxt(protofile)
+        self.models = self.create_network(self.net_info, width, height, channels)
         for name,model in self.models.items():
             self.add_module(name, model)
 
@@ -348,6 +377,9 @@ class CaffeNet(nn.Module):
 
     def set_verbose(self, verbose):
         self.verbose = verbose
+
+    def set_phase(self, phase):
+        self.phase = phase
 
     def set_mean_file(self, mean_file):
         if mean_file != "":
@@ -395,6 +427,12 @@ class CaffeNet(nn.Module):
         while i < layer_num:
             layer = layers[i]
             lname = layer['name']
+            if layer.has_key('include') and layer['include'].has_key('phase'):
+                phase = layer['include']['phase']
+                lname = lname + '.' + phase
+                if phase != self.phase:
+                    i = i + 1
+                    continue
             ltype = layer['type']
             tname = layer['top']
             tnames = tname if type(tname) == list else [tname]
@@ -415,9 +453,7 @@ class CaffeNet(nn.Module):
 
             bname = layer['bottom']
             bnames = bname if type(bname) == list else [bname]
-            if ltype in ['Accuracy', 'SoftmaxWithLoss', 'Region']:
-                i = i + 1
-            else:
+            if True:
                 bdatas = [self.blobs[name] for name in bnames]
                 tdatas = self._modules[lname](*bdatas)
                 if type(tdatas) != tuple:
@@ -482,6 +518,9 @@ class CaffeNet(nn.Module):
         while i < layer_num:
             layer = layers[i]
             lname = layer['name']
+            if layer.has_key('include') and layer['include'].has_key('phase'):
+                phase = layer['include']['phase']
+                lname = lname + '.' + phase
             ltype = layer['type']
             if ltype in ['Convolution', 'Deconvolution']:
                 print('load weights %s' % lname)
@@ -523,13 +562,12 @@ class CaffeNet(nn.Module):
                     if len(lmap[lname].blobs) > 1:
                         self.models[lname].bias.data.copy_(torch.from_numpy(np.array(lmap[lname].blobs[1].data)))
                 i = i + 1
-            elif ltype in ['Data', 'AnnotatedData', 'Pooling', 'Eltwise', 'ReLU', 'Region', 'Permute', 'Flatten', 'Slice', 'Concat', 'Softmax', 'SoftmaxWithLoss', 'LRN', 'Dropout', 'Reshape', 'PriorBox', 'DetectionOutput']:
-                i = i + 1
             else:
-                print('load_weights: unknown type %s' % ltype)
+                if not ltype in SUPPORTED_LAYERS:
+                    print('load_weights: unknown type %s' % ltype)
                 i = i + 1
 
-    def create_network(self, net_info, input_width = None, input_height = None):
+    def create_network(self, net_info, input_width = None, input_height = None, input_channels = None):
         models = OrderedDict()
         blob_channels = dict()
         blob_width = dict()
@@ -539,6 +577,15 @@ class CaffeNet(nn.Module):
         props = net_info['props']
         layer_num = len(layers)
 
+        blob_channels['data'] = 3
+        if input_channels != None:
+            blob_channels['data'] = input_channels
+        blob_height['data'] = 1
+        if input_height != None:
+            blob_height['data'] = input_height
+        blob_width['data'] = 1
+        if input_width != None:
+            blob_width['data'] = input_width
         if props.has_key('input_shape'):
             blob_channels['data'] = int(props['input_shape']['dim'][1])
             blob_height['data'] = int(props['input_shape']['dim'][2])
@@ -564,19 +611,24 @@ class CaffeNet(nn.Module):
         while i < layer_num:
             layer = layers[i]
             lname = layer['name']
+            if layer.has_key('include') and layer['include'].has_key('phase'):
+                phase = layer['include']['phase']
+                lname = lname + '.' + phase
             ltype = layer['type']
+            tname = layer['top']
             if ltype in ['Data', 'AnnotatedData']:
                 if not self.omit_data_layer:
                     models[lname] = CaffeData(layer)
-                blob_channels['data'] = len(layer['transform_param']['mean_value'])
-                blob_height['data'] = int(layer['transform_param']['resize_param']['height'])
-                blob_width['data'] = int(layer['transform_param']['resize_param']['width'])
-                self.height = blob_height['data']
-                self.width = blob_width['data']
+                    data, label = models[lname].forward()
+                    data_name = tname[0] if type(tname) == list else tname
+                    blob_channels[data_name] = data.size(1) # len(layer['transform_param']['mean_value'])
+                    blob_height[data_name] = data.size(2) #int(layer['transform_param']['resize_param']['height'])
+                    blob_width[data_name] = data.size(3) #int(layer['transform_param']['resize_param']['width'])
+                    self.height = blob_height[data_name]
+                    self.width = blob_width[data_name]
                 i = i + 1
                 continue
             bname = layer['bottom']
-            tname = layer['top']
             if ltype == 'Convolution':
                 convolution_param = layer['convolution_param']
                 channels = blob_channels[bname]
@@ -837,8 +889,14 @@ class CaffeNet(nn.Module):
                 blob_width[tname] = 1
                 blob_height[tname] = 1
                 i = i + 1
+            elif ltype == 'Accuracy':
+                models[lname] = Accuracy()
+                blob_channels[tname] = 1
+                blob_width[tname] = 1
+                blob_height[tname] = 1
+                i = i + 1
             elif ltype == 'SoftmaxWithLoss':
-                models[lname] = nn.CrossEntropyLoss()
+                models[lname] =  SoftmaxWithLoss()
                 blob_channels[tname] = 1
                 blob_width[tname] = 1
                 blob_height[tname] = 1

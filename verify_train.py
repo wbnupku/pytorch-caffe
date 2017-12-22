@@ -21,14 +21,20 @@ def forward_caffe(protofile, weightfile):
         caffe.set_mode_gpu()
     else:
         caffe.set_mode_cpu()
-    net = caffe.Net(protofile, weightfile, caffe.TRAIN)
+    if args.phase == 'TRAIN':
+        net = caffe.Net(protofile, weightfile, caffe.TRAIN)
+    else:
+        net = caffe.Net(protofile, weightfile, caffe.TEST)
     t0 = time.time()
     output = net.forward()
     t1 = time.time()
     return t1-t0, net.blobs, net.params
 
 def forward_pytorch(protofile, weightfile, data, label):
-    net = CaffeNet(protofile)
+    channels = data.shape[1]
+    height = data.shape[2]
+    width = data.shape[3]
+    net = CaffeNet(protofile, width=width, height=height, channels=channels, omit_data_layer = True, phase=args.phase)
     if args.cuda:
         net.cuda()
     print(net)
@@ -51,8 +57,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert caffe to pytorch')
     parser.add_argument('--protofile', default='', type=str)
     parser.add_argument('--weightfile', default='', type=str)
+    parser.add_argument('--phase', default='TRAIN', type=str)
     parser.add_argument('--synset_words', default='', type=str)
     parser.add_argument('--cuda', action='store_true', help='enables cuda')
+    #parser.add_argument('--omit_data_layer', action='store_true', help='whether to omit_data_layer')
 
     args = parser.parse_args()
     print(args)

@@ -50,7 +50,8 @@ Each layer in caffe will have a corresponding layer in pytorch.
 - [x] Pooling
 - [x] Reshape
 - [x] Softmax
-- [x] SoftmaxWithLoss. 
+- [x] Accuracy
+- [x] SoftmaxWithLoss
 - [x] Dropout
 - [x] Eltwise
 - [x] Normalize
