@@ -569,8 +569,8 @@ class CaffeNet(nn.Module):
                 if not self.omit_data_layer:
                     models[lname] = CaffeData(layer)
                 blob_channels['data'] = len(layer['transform_param']['mean_value'])
-                blob_height['data'] = len(layer['transform_param']['resize_param']['height'])
-                blob_width['data'] = len(layer['transform_param']['resize_param']['width'])
+                blob_height['data'] = int(layer['transform_param']['resize_param']['height'])
+                blob_width['data'] = int(layer['transform_param']['resize_param']['width'])
                 self.height = blob_height['data']
                 self.width = blob_width['data']
                 i = i + 1

@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Function
 from torch.autograd import Variable
+import torch.nn.functional as F
 
 def point_form(boxes):
     """ Convert prior_boxes to (xmin, ymin, xmax, ymax)
@@ -99,15 +100,18 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     best_truth_overlap, best_truth_idx = overlaps.max(0)
     best_truth_idx.squeeze_(0)
     best_truth_overlap.squeeze_(0)
-    best_prior_idx.squeeze_(1)
-    best_prior_overlap.squeeze_(1)
-    best_truth_overlap.index_fill_(0, best_prior_idx, 2)  # ensure best prior
+
+    #best_prior_idx.squeeze_(1)
+    #best_prior_overlap.squeeze_(1)
+    #best_truth_overlap.index_fill_(0, best_prior_idx, 2)  # ensure best prior
     # TODO refactor: index  best_prior_idx with long tensor
     # ensure every gt matches with its prior of max overlap
     for j in range(best_prior_idx.size(0)):
         best_truth_idx[best_prior_idx[j]] = j
+        best_truth_overlap[best_prior_idx[j]] = best_prior_overlap[j]
+
     matches = truths[best_truth_idx]          # Shape: [num_priors,4]
-    conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
+    conf = labels[best_truth_idx]         # Shape: [num_priors]
     conf[best_truth_overlap < threshold] = 0  # label as background
     loc = encode(matches, priors, variances)
     loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
@@ -393,17 +397,22 @@ class MultiBoxLoss(nn.Module):
         """
         #loc_data, conf_data, priors = predictions
         num = loc_data.size(0)
-        priors = priors[:loc_data.size(1), :]
-        num_priors = (priors.size(0))
+        num_priors = (loc_data.size(1)/4)
         num_classes = self.num_classes
+        loc_data = loc_data.view(num, num_priors, 4)
+        conf_data = conf_data.view(num, num_priors, num_classes)
+        priors = priors[0][0].view(num_priors, 4)
+        targets = targets.view(-1, 8)
 
         # match priors (default boxes) and ground truth boxes
         loc_t = torch.Tensor(num, num_priors, 4)
         conf_t = torch.LongTensor(num, num_priors)
         for idx in range(num):
-            truths = targets[idx][:, :-1].data
-            labels = targets[idx][:, -1].data
+            sub_targets = targets[(targets[:,0] == idx).view(-1,1).expand_as(targets)].view(-1,8)
+            truths = sub_targets[:, 3:7].data
+            labels = sub_targets[:, 1].data
             defaults = priors.data
+            defaults = center_size(defaults)
             match(self.threshold, truths, defaults, self.variance, labels,
                   loc_t, conf_t, idx)
         if self.use_gpu:
@@ -426,7 +435,7 @@ class MultiBoxLoss(nn.Module):
         # Compute max conf across batch for hard negative mining
         batch_conf = conf_data.view(-1, self.num_classes)
 
-        loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1, 1))
+        loss_c = log_sum_exp(batch_conf).view(-1,1) - batch_conf.gather(1, conf_t.view(-1, 1))
 
         # Hard Negative Mining
         loss_c[pos] = 0  # filter out pos boxes for now
@@ -434,7 +443,7 @@ class MultiBoxLoss(nn.Module):
         _, loss_idx = loss_c.sort(1, descending=True)
         _, idx_rank = loss_idx.sort(1)
         num_pos = pos.long().sum(1, keepdim=True)
-        num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
+        num_neg = Variable(torch.clamp(self.negpos_ratio*num_pos.data.float(), max=pos.size(1)-1).long())
         neg = idx_rank < num_neg.expand_as(idx_rank)
 
         # Confidence Loss Including Positive and Negative Examples
@@ -449,4 +458,4 @@ class MultiBoxLoss(nn.Module):
         N = num_pos.data.sum()
         loss_l /= N
         loss_c /= N
-        return loss_l, loss_c
+        return loss_l + loss_c
