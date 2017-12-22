@@ -424,6 +424,7 @@ class CaffeNet(nn.Module):
         layers = self.net_info['layers']
         layer_num = len(layers)
         i = 0
+        self.output_loss = None
         while i < layer_num:
             layer = layers[i]
             lname = layer['name']
@@ -462,6 +463,11 @@ class CaffeNet(nn.Module):
                 assert(len(tdatas) == len(tnames))
                 for index, tdata in enumerate(tdatas):
                     self.blobs[tnames[index]] = tdata
+                if ltype in ['SoftmaxWithLoss', 'MultiBoxLoss']:
+                    if self.output_loss != None:
+                        self.output_loss += tdatas[0]
+                    else:
+                        self.output_loss = tdatas[0]
                 i = i + 1
             input_size = self.blobs[bnames[0]].size()
             output_size = self.blobs[tnames[0]].size()
@@ -474,6 +480,9 @@ class CaffeNet(nn.Module):
 #            return odatas
 #        else:
 #            return blobs[self.outputs]
+
+    def get_loss(self):
+        return self.output_loss
 
     def print_network(self):
         print(self)
