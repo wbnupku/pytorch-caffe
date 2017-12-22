@@ -34,7 +34,10 @@ class CaffeData(nn.Module):
         save_prototxt(net_info, protofile)
         weightfile = '.temp_data%f.caffemodel' % rand_val
         open(weightfile, 'w').close()
-        self.net = caffe.Net(protofile, weightfile, caffe.TRAIN)
+        if layer.has_key('include') and layer['include'] == 'TRAIN':
+            self.net = caffe.Net(protofile, weightfile, caffe.TRAIN)
+        else:
+            self.net = caffe.Net(protofile, weightfile, caffe.TEST)
 
     def forward(self):
         self.net.forward()
@@ -380,6 +383,10 @@ class CaffeNet(nn.Module):
 
     def set_phase(self, phase):
         self.phase = phase
+        if phase == 'TRAIN':
+            self.train()
+        else:
+            self.eval()
 
     def set_mean_file(self, mean_file):
         if mean_file != "":

@@ -169,6 +169,21 @@ def save_prototxt(net_info, protofile, region=True):
             print_block(layer, 'layer', 0)
     fp.close()
 
+def parse_solver(solverfile):
+    solver = OrderedDict()
+    lines = open(solverfile).readlines()
+    for line in lines:
+        line = line.strip()
+        if line[0] == '#':
+            continue
+        if line.find('#') >= 0:
+            line = line.split('#')[0]
+        items = line.split(':')
+        key = items[0].strip()
+        value = items[1].strip().strip('"')
+        solver[key] = value
+    return solver
+
 
 if __name__ == '__main__':
     import sys
