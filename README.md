@@ -68,13 +68,36 @@ Each layer in caffe will have a corresponding layer in pytorch.
 ### Verify between caffe and pytorch
 The script verify.py can verify the parameter and output difference between caffe and pytorch.
 ```
-python verify.py --protofile resnet50/deploy.prototxt --weightfile resnet50/resnet50.caffemodel --imgfile data/cat.jpg --meanB 104.01 --meanG 116.67 --meanR 122.68 --scale 255 --height 224 --width 224 --synset_words data/synset_words.txt --cuda
+python verify_time.py --protofile resnet50/deploy.prototxt --weightfile resnet50/resnet50.caffemodel --imgfile data/cat.jpg --meanB 104.01 --meanG 116.67 --meanR 122.68 --scale 255 --height 224 --width 224 --synset_words data/synset_words.txt --cuda
+python verify_deploy.py --protofile resnet50/deploy.prototxt --weightfile resnet50/resnet50.caffemodel --imgfile data/cat.jpg --meanB 104.01 --meanG 116.67 --meanR 122.68 --scale 255 --height 224 --width 224 --synset_words data/synset_words.txt --cuda
 ```
 Note: 
 1. synset_words.txt contains class information, each line represents the description of a class.
 2. resnet50 is downloaded from [BaiduYun](http://pan.baidu.com/s/1kVm4ly3)
 
 Outputs:
+```
+pytorch forward0: 0.887461
+pytorch forward1: 0.077649
+pytorch forward2: 0.022872
+pytorch forward3: 0.021319
+pytorch forward4: 0.018347
+pytorch forward5: 0.018263
+pytorch forward6: 0.018249
+pytorch forward7: 0.018289
+pytorch forward8: 0.018553
+pytorch forward9: 0.018290
+caffe forward0: 0.106477
+caffe forward1: 0.025897
+caffe forward2: 0.025949
+caffe forward3: 0.026127
+caffe forward4: 0.025875
+caffe forward5: 0.025874
+caffe forward6: 0.025646
+caffe forward7: 0.025932
+caffe forward8: 0.025827
+caffe forward9: 0.025849
+```
 ```
 ------------ Parameter Difference ------------
 conv1                                weight_diff: 0.000000        bias_diff: 0.000000
