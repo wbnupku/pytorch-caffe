@@ -63,6 +63,7 @@ Each layer in caffe will have a corresponding layer in pytorch.
 - [x] DetectionOutput: support batchsize=1, num_classes=1 forward
 - [x] Crop
 - [x] Deconvolution
+- [x] MultiBoxLoss
 
 ### Verify between caffe and pytorch
 The script verify.py can verify the parameter and output difference between caffe and pytorch.
