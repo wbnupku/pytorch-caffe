@@ -8,7 +8,7 @@ from caffenet import CaffeNet
 from prototxt import parse_solver
 
 # Training settings
-parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+parser = argparse.ArgumentParser(description='PyTorch Train Caffe Example')
 parser.add_argument('--gpu', help='gpu ids e.g "0,1,2,3"')
 parser.add_argument('--solver', help='the solver prototxt')
 parser.add_argument('--model', help='the network definition prototxt')
@@ -35,6 +35,7 @@ model = CaffeNet(protofile)
 model.set_verbose(False)
 print(model)
 
+net = model
 if args.gpu:
     device_ids = args.gpu.split(',')
     device_ids = [int(i) for i in device_ids]

@@ -42,22 +42,19 @@ class CaffeData(nn.Module):
         else:
             self.net = caffe.Net(protofile, weightfile, caffe.TEST)
         self.is_cuda = True
+        self.register_buffer('data', torch.zeros(1))
+        self.register_buffer('label', torch.zeros(1))
     def __repr__(self):
         return 'CaffeData()'
-    def cuda(self):
-        self.is_cuda = True
-    def cpu(self):
-        self.is_cuda = False
     def forward(self):
         self.net.forward()
         data = self.net.blobs['data'].data
         label = self.net.blobs['label'].data
         data = torch.from_numpy(data)
         label = torch.from_numpy(label)
-        if self.is_cuda:
-            return Variable(data.cuda()), Variable(label.cuda())
-        else:
-            return Variable(data), Variable(label)
+        self.data.resize_(data.size()).copy_(data)
+        self.label.resize_(label.size()).copy_(label)
+        return Variable(self.data), Variable(self.label)
 
 class FCView(nn.Module):
     def __init__(self):
