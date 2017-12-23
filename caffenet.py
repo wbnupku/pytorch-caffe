@@ -27,6 +27,8 @@ class CaffeData(nn.Module):
         props = OrderedDict()
         props['name'] = 'temp network'
         net_info['props'] = props
+        if layer.has_key('include'):
+            layer.pop('include')
         net_info['layers'] = [layer]
 
         rand_val = random.random()
@@ -34,18 +36,28 @@ class CaffeData(nn.Module):
         save_prototxt(net_info, protofile)
         weightfile = '.temp_data%f.caffemodel' % rand_val
         open(weightfile, 'w').close()
+        caffe.set_mode_cpu()
         if layer.has_key('include') and layer['include'] == 'TRAIN':
             self.net = caffe.Net(protofile, weightfile, caffe.TRAIN)
         else:
             self.net = caffe.Net(protofile, weightfile, caffe.TEST)
-
+        self.is_cuda = True
+    def __repr__(self):
+        return 'CaffeData()'
+    def cuda(self):
+        self.is_cuda = True
+    def cpu(self):
+        self.is_cuda = False
     def forward(self):
         self.net.forward()
         data = self.net.blobs['data'].data
         label = self.net.blobs['label'].data
         data = torch.from_numpy(data)
         label = torch.from_numpy(label)
-        return Variable(data.cuda()), Variable(label.cuda())
+        if self.is_cuda:
+            return Variable(data.cuda()), Variable(label.cuda())
+        else:
+            return Variable(data), Variable(label)
 
 class FCView(nn.Module):
     def __init__(self):
@@ -377,6 +389,7 @@ class CaffeNet(nn.Module):
 
         self.blobs = None
         self.verbose = True
+        self.outputs = []
 
     def set_verbose(self, verbose):
         self.verbose = verbose
@@ -397,11 +410,13 @@ class CaffeNet(nn.Module):
             self.has_mean = False
             self.mean_file = ""
 
-    def get_outputs(self, output_names):
-        outputs = []
-        for name in output_names:
-            outputs.append(self.blobs[name])
-        return outputs
+    def set_outputs(self, *outputs):
+        self.outputs = list(outputs)
+    def get_outputs(self, outputs):
+        blobs = []
+        for name in outputs:
+            blobs.append(self.blobs[name])
+        return blobs
 
     def forward(self, *inputs): 
         self.blobs = OrderedDict()
@@ -481,12 +496,13 @@ class CaffeNet(nn.Module):
             if self.verbose:
                 print('forward %-30s %s -> %s' % (lname, list(input_size), list(output_size)))
 
-        return self.blobs
-#        if type(self.outputs) == list:
-#            odatas = [blobs[name] for name in self.outputs]
-#            return odatas
-#        else:
-#            return blobs[self.outputs]
+        if len(self.outputs) > 1:
+            odatas = [self.blobs[name] for name in self.outputs]
+            return tuple(odatas)
+        elif len(self.outputs) == 1:
+            return self.blobs[self.outputs[0]]
+        else:
+            return self.blobs
 
     def get_loss(self):
         return self.output_loss
@@ -634,7 +650,7 @@ class CaffeNet(nn.Module):
             tname = layer['top']
             if ltype in ['Data', 'AnnotatedData']:
                 if not self.omit_data_layer:
-                    models[lname] = CaffeData(layer)
+                    models[lname] = CaffeData(layer.copy())
                     data, label = models[lname].forward()
                     data_name = tname[0] if type(tname) == list else tname
                     blob_channels[data_name] = data.size(1) # len(layer['transform_param']['mean_value'])
@@ -922,9 +938,11 @@ class CaffeNet(nn.Module):
                 i = i + 1
             input_width = blob_width[bname] if type(bname) != list else blob_width[bname[0]]
             input_height = blob_height[bname] if type(bname) != list else blob_height[bname[0]]
+            input_channels = blob_channels[bname] if type(bname) != list else blob_channels[bname[0]]
             output_width = blob_width[tname] if type(tname) != list else blob_width[tname[0]]
             output_height = blob_height[tname] if type(tname) != list else blob_height[tname[0]]
-            print('create %-30s (%4d x %4d) -> (%4d x %4d)' % (lname, input_width, input_height, output_width, output_height))
+            output_channels = blob_channels[tname] if type(tname) != list else blob_channels[tname[0]]
+            print('create %-20s (%4d x %4d x %4d) -> (%4d x %4d x %4d)' % (lname, input_channels, input_height, input_width, output_channels, output_height, output_width))
 
         return models
 
