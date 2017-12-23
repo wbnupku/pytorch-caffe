@@ -409,9 +409,12 @@ class MultiBoxLoss(nn.Module):
 
         # match priors (default boxes) and ground truth boxes
         loc_t = torch.Tensor(num, num_priors, 4)
-        conf_t = torch.LongTensor(num, num_priors)
+        conf_t = torch.zeros(num, num_priors).long()
         for idx in range(num):
-            sub_targets = targets[(targets[:,0] == idx).view(-1,1).expand_as(targets)].view(-1,8)
+            sub_mask = (targets[:,0] == idx)
+            if sub_mask.data.float().sum() == 0:
+                continue
+            sub_targets = targets[sub_mask.view(-1,1).expand_as(targets)].view(-1,8)
             truths = sub_targets[:, 3:7].data
             labels = sub_targets[:, 1].data
             defaults = priors.data
