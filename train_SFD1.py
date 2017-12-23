@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
-from caffenet import CaffeNet, ParallelCaffeNet
+from caffenet import CaffeNet
 from prototxt import parse_solver
 import caffe
 

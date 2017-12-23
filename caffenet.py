@@ -54,7 +54,7 @@ class CaffeData(nn.Module):
         label = torch.from_numpy(label)
         self.data.resize_(data.size()).copy_(data)
         self.label.resize_(label.size()).copy_(label)
-        print('dataloader data size = %s' % (str(self.data.size())))
+        #print('dataloader data size = %s' % (str(self.data.size())))
         return Variable(self.data), Variable(self.label)
 
 class FCView(nn.Module):
@@ -994,17 +994,3 @@ class CaffeNet(nn.Module):
 
         return models
 
-
-class ParallelCaffeNet(nn.Module):
-    def __init__(self, caffe_module, device_ids):
-        super(ParallelCaffeNet, self).__init__()
-        print('ParallelCaffeNet: device_ids = ', device_ids)
-        self.device_ids = device_ids
-        self.parallel_model = nn.DataParallel(caffe_module, device_ids)
-    def forward(self, x):
-        self.parallel_model.module.set_forward_data_only(True)
-        inputs = self.parallel_model.module()
-        inputs = [item.cuda() for item in inputs]
-        inputs = tuple(inputs)
-        self.parallel_model.module.set_forward_net_only(True)
-        return self.parallel_model(*inputs)
