@@ -4,7 +4,8 @@ import os
 import time
 import torch
 import torch.optim as optim
-from caffenet import CaffeNet
+from torch.autograd import Variable
+from caffenet import CaffeNet, ParallelCaffeNet
 from prototxt import parse_solver
 
 # Training settings
@@ -31,21 +32,22 @@ torch.manual_seed(int(time.time()))
 if args.gpu:
     torch.cuda.manual_seed(int(time.time()))
 
-model = CaffeNet(protofile)
-model.set_verbose(False)
-print(model)
+net = CaffeNet(protofile)
+net.set_verbose(False)
+net.set_train_outputs('loss')
+net.set_eval_outputs('loss', 'accuracy')
+print(net)
 
-net = model
 if args.gpu:
     device_ids = args.gpu.split(',')
     device_ids = [int(i) for i in device_ids]
     print('device_ids', device_ids)
     if len(device_ids) > 1:
-        print('--- multi gpus ---')
-        net = torch.nn.DataParallel(model, device_ids=device_ids).cuda()
+        print('---- Multi GPUs ----')
+        net = ParallelCaffeNet(net.cuda(), device_ids=device_ids)
     else:
-        print('--- single gpu ---')
-        net = model.cuda()
+        print('---- Single GPU ----')
+        net.cuda()
 
 optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=momentum, weight_decay=weight_decay)
 
@@ -57,36 +59,32 @@ if args.weights:
     print('loaded state %s' % (args.weights))
 
 net.train()
-model.set_phase('TRAIN')
-model.set_outputs('loss')
 for batch in range(max_iter):
     if (batch+1) % test_interval == 0:
         net.eval()
-        model.set_phase('TEST')
-        model.set_outputs('loss', 'accuracy')
         average_accuracy = 0.0
         average_loss = 0.0
         for i in range(test_iter):
             loss, accuracy = net()
-            average_accuracy += accuracy.data[0]
-            average_loss += loss.data[0]
+            average_accuracy += accuracy.data.mean()
+            average_loss += loss.data.mean()
         average_accuracy /= test_iter
         average_loss /= test_iter
-        print('[%d] accuracy: %f' % (batch+1, average_accuracy))
-        print('[%d]     loss: %f' % (batch+1, average_loss))
+        print('[%d]  test loss: %f\ttest accuracy: %f' % (batch+1, average_loss, average_accuracy))
         net.train()
-        model.set_phase('TRAIN')
-        model.set_outputs('loss')
     else:
         optimizer.zero_grad()
-        loss = net()
+        loss = net().mean()
         loss.backward()
         optimizer.step()
+        if (batch+1) % 100 == 0:
+            print('[%d] train loss: %f' % (batch+1, loss.data[0]))
+        
 
     if (batch+1) % snapshot == 0:
         savename = '%s_batch%08d.pth' % (snapshot_prefix, batch+1)
         print('save state %s' % (savename))
         state = {'batch': batch+1,
-                'state_dict': model.state_dict(),
+                'state_dict': net.state_dict(),
                 'optimizer': optimizer.state_dict()}
         torch.save(state, savename)

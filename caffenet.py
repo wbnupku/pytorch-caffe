@@ -27,6 +27,7 @@ class CaffeData(nn.Module):
         props = OrderedDict()
         props['name'] = 'temp network'
         net_info['props'] = props
+        print('CaffeData init phase = %s' % (layer['include']['phase']))
         if layer.has_key('include'):
             layer.pop('include')
         net_info['layers'] = [layer]
@@ -41,7 +42,6 @@ class CaffeData(nn.Module):
             self.net = caffe.Net(protofile, weightfile, caffe.TRAIN)
         else:
             self.net = caffe.Net(protofile, weightfile, caffe.TEST)
-        self.is_cuda = True
         self.register_buffer('data', torch.zeros(1))
         self.register_buffer('label', torch.zeros(1))
     def __repr__(self):
@@ -301,7 +301,6 @@ class Accuracy(nn.Module):
         accuracy = torch.FloatTensor([accuracy]).type_as(output.data)
         return Variable(accuracy)
 
-
 class PriorBox(nn.Module):
     """Compute priorbox coordinates in center-offset form for each source
     feature map.
@@ -386,7 +385,24 @@ class CaffeNet(nn.Module):
 
         self.blobs = None
         self.verbose = True
-        self.outputs = []
+        self.train_outputs = []
+        self.eval_outputs = []
+        self.forward_data_only = False
+        self.forward_net_only = False
+
+    def set_forward_data_only(self, flag):
+        self.forward_data_only = flag
+        if self.forward_data_only:
+            self.forward_net_only = False
+
+    def set_forward_net_only(self, flag):
+        self.forward_net_only = flag
+        if self.forward_net_only:
+            self.forward_data_only = False
+
+    def set_forward_both(self):
+        self.forward_data_only = False
+        self.forward_net_only = False
 
     def set_verbose(self, verbose):
         self.verbose = verbose
@@ -407,8 +423,12 @@ class CaffeNet(nn.Module):
             self.has_mean = False
             self.mean_file = ""
 
-    def set_outputs(self, *outputs):
-        self.outputs = list(outputs)
+    def set_train_outputs(self, *outputs):
+        self.train_outputs = list(outputs)
+
+    def set_eval_outputs(self, *outputs):
+        self.eval_outputs = list(outputs)
+
     def get_outputs(self, outputs):
         blobs = []
         for name in outputs:
@@ -416,6 +436,11 @@ class CaffeNet(nn.Module):
         return blobs
 
     def forward(self, *inputs): 
+        if self.training:
+            self.set_phase('TRAIN')
+        else:
+            self.set_phase('TEST')
+
         self.blobs = OrderedDict()
       
         if len(inputs) >= 2:
@@ -457,7 +482,7 @@ class CaffeNet(nn.Module):
             tname = layer['top']
             tnames = tname if type(tname) == list else [tname]
             if ltype in ['Data', 'AnnotatedData']:
-                if not self.omit_data_layer:
+                if (not self.omit_data_layer) and (not self.forward_net_only):
                     tdatas = self._modules[lname]()
                     if type(tdatas) != tuple:
                         tdatas = (tdatas,)
@@ -470,6 +495,9 @@ class CaffeNet(nn.Module):
                         print('forward %-30s produce -> %s' % (lname, list(output_size)))
                 i = i + 1
                 continue
+
+            if self.forward_data_only:
+                break
 
             bname = layer['bottom']
             bnames = bname if type(bname) == list else [bname]
@@ -493,13 +521,26 @@ class CaffeNet(nn.Module):
             if self.verbose:
                 print('forward %-30s %s -> %s' % (lname, list(input_size), list(output_size)))
 
-        if len(self.outputs) > 1:
-            odatas = [self.blobs[name] for name in self.outputs]
+        if self.forward_data_only:
+            odatas = [blob for blob in self.blobs.values()]
             return tuple(odatas)
-        elif len(self.outputs) == 1:
-            return self.blobs[self.outputs[0]]
+
+        elif self.training:
+            if len(self.train_outputs) > 1:
+                odatas = [self.blobs[name] for name in self.train_outputs]
+                return tuple(odatas)
+            elif len(self.train_outputs) == 1:
+                return self.blobs[self.train_outputs[0]]
+            else:
+                return self.blobs
         else:
-            return self.blobs
+            if len(self.eval_outputs) > 1:
+                odatas = [self.blobs[name] for name in self.eval_outputs]
+                return tuple(odatas)
+            elif len(self.eval_outputs) == 1:
+                return self.blobs[self.eval_outputs[0]]
+            else:
+                return self.blobs
 
     def get_loss(self):
         return self.output_loss
@@ -944,3 +985,15 @@ class CaffeNet(nn.Module):
         return models
 
 
+class ParallelCaffeNet(nn.Module):
+    def __init__(self, caffe_module, device_ids):
+        super(ParallelCaffeNet, self).__init__()
+
+        self.module = caffe_module
+        self.device_ids = device_ids
+        self.parallel_model = nn.DataParallel(self.module, device_ids)
+    def forward(self):
+        self.module.set_forward_data_only(True)
+        inputs = self.module()
+        self.module.set_forward_net_only(True)
+        return self.parallel_model(*inputs)
