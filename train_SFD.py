@@ -14,7 +14,6 @@ import caffe
 class ParallelCaffeNet(nn.Module):
     def __init__(self, caffe_module, device_ids):
         super(ParallelCaffeNet, self).__init__()
-        print('ParallelCaffeNet: device_ids = ', device_ids)
         self.device_ids = device_ids
         self.module = nn.DataParallel(caffe_module, device_ids)
 
@@ -50,6 +49,9 @@ def adjust_learning_rate(optimizer, batch):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     return lr
+
+def logging(message):
+    print('%s %s' % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), message))
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Train Caffe Example')
@@ -114,11 +116,11 @@ if args.snapshot:
 
 net.train()
 lr = adjust_learning_rate(optimizer, 0)
-print('[0] init_lr = %f' % lr)
+logging('[0] init_lr = %f' % lr)
 for batch in range(max_iter):
     if batch in stepvalues:
         lr = adjust_learning_rate(optimizer, batch)
-        print('[%d] lr = %f' % (batch, lr))
+        logging('[%d] lr = %f' % (batch, lr))
 
     if (batch+1) % test_interval == 0:
         net.eval()
@@ -130,7 +132,7 @@ for batch in range(max_iter):
             average_loss += loss.data.mean()
         average_accuracy /= test_iter
         average_loss /= test_iter
-        print('[%d]  test loss: %f\ttest accuracy: %f' % (batch+1, average_loss, average_accuracy))
+        logging('[%d]  test loss: %f\ttest accuracy: %f' % (batch+1, average_loss, average_accuracy))
         net.train()
     else:
         optimizer.zero_grad()
@@ -138,12 +140,12 @@ for batch in range(max_iter):
         loss.backward()
         optimizer.step()
         if (batch+1) % display == 0:
-            print('[%d] train loss: %f' % (batch+1, loss.data[0]))
+            logging('[%d] train loss: %f' % (batch+1, loss.data[0]))
         
 
     if (batch+1) % snapshot == 0:
         savename = '%s_batch%08d.pth' % (snapshot_prefix, batch+1)
-        print('save state %s' % (savename))
+        logging('save state %s' % (savename))
         state = {'batch': batch+1,
                 'state_dict': net.state_dict(),
                 'optimizer': optimizer.state_dict()}
