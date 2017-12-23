@@ -126,7 +126,9 @@ class Crop(nn.Module):
     def forward(self, x, ref):
         for axis in range(self.axis, x.dim()):
             ref_size = ref.size(axis)
-            x = x.index_select(axis, Variable(torch.arange(self.offset, self.offset + ref_size).type_as(x.data).long()))
+            indices = torch.arange(self.offset, self.offset + ref_size).long()
+            indices = x.data.new().resize_(indices.size()).copy_(indices)
+            x = x.index_select(axis, Variable(indices))
         return x
 
 class Slice(nn.Module):
@@ -298,7 +300,7 @@ class Accuracy(nn.Module):
         n_correct = (max_ids.view(-1).float() == label.data).sum()
         batchsize = output.data.size(0)
         accuracy = float(n_correct)/batchsize
-        accuracy = torch.FloatTensor([accuracy]).type_as(output.data)
+        accuracy = output.data.new().resize_(1).fill_(accuracy)
         return Variable(accuracy)
 
 class PriorBox(nn.Module):
