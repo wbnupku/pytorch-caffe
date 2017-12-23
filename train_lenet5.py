@@ -1,8 +1,10 @@
+#python train.py --solver mnist/lenet_solver.prototxt --gpu 0,1
 from __future__ import print_function
 import argparse
 import os
 import time
 import torch
+import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 from caffenet import CaffeNet, ParallelCaffeNet
@@ -45,6 +47,7 @@ if args.gpu:
     if len(device_ids) > 1:
         print('---- Multi GPUs ----')
         net = ParallelCaffeNet(net.cuda(), device_ids=device_ids)
+        #net = nn.DataParallel(net.cuda(), device_ids=device_ids)
     else:
         print('---- Single GPU ----')
         net.cuda()
@@ -59,13 +62,14 @@ if args.weights:
     print('loaded state %s' % (args.weights))
 
 net.train()
+buf = Variable(torch.zeros(len(device_ids)).cuda())
 for batch in range(max_iter):
     if (batch+1) % test_interval == 0:
         net.eval()
         average_accuracy = 0.0
         average_loss = 0.0
         for i in range(test_iter):
-            loss, accuracy = net()
+            loss, accuracy = net(buf)
             average_accuracy += accuracy.data.mean()
             average_loss += loss.data.mean()
         average_accuracy /= test_iter
@@ -74,7 +78,7 @@ for batch in range(max_iter):
         net.train()
     else:
         optimizer.zero_grad()
-        loss = net().mean()
+        loss = net(buf).mean()
         loss.backward()
         optimizer.step()
         if (batch+1) % 100 == 0:

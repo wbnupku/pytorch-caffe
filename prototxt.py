@@ -181,7 +181,12 @@ def parse_solver(solverfile):
         items = line.split(':')
         key = items[0].strip()
         value = items[1].strip().strip('"')
-        solver[key] = value
+        if not solver.has_key(key):
+            solver[key] = value
+        elif not type(solver[key]) == list:
+            solver[key] = [solver[key], value]
+        else:
+            solver[key].append(value)
     return solver
 
 

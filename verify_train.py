@@ -122,6 +122,9 @@ if __name__ == '__main__':
         caffe_data = caffe_blobs[blob_name].data
         diff = abs(pytorch_data - caffe_data).sum()
         print('%-30s pytorch_shape: %-20s caffe_shape: %-20s output_diff: %f' % (blob_name, pytorch_data.shape, caffe_data.shape, diff/pytorch_data.size))
+        #if blob_name == 'mbox_loss':
+        #    print('pytorch mbox_loss', pytorch_data)
+        #    print('caffe mbox_loss', caffe_data)
 
     if args.synset_words != '':
         print('------------ Classification ------------')

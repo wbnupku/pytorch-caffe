@@ -60,6 +60,7 @@ if __name__ == '__main__':
 
     for i in range(10):
         data, label = data_loader.next()
+        print('data shape', data.shape)
         blobs = forward_network(net, data, label)
         blob_names = blobs.keys()
         for blob_name in blob_names:

@@ -54,6 +54,7 @@ class CaffeData(nn.Module):
         label = torch.from_numpy(label)
         self.data.resize_(data.size()).copy_(data)
         self.label.resize_(label.size()).copy_(label)
+        print('dataloader data size = %s' % (str(self.data.size())))
         return Variable(self.data), Variable(self.label)
 
 class FCView(nn.Module):
@@ -300,6 +301,7 @@ class Accuracy(nn.Module):
         n_correct = (max_ids.view(-1).float() == label.data).sum()
         batchsize = output.data.size(0)
         accuracy = float(n_correct)/batchsize
+        print('accuracy = %f', accuracy)
         accuracy = output.data.new().resize_(1).fill_(accuracy)
         return Variable(accuracy)
 
@@ -523,6 +525,9 @@ class CaffeNet(nn.Module):
             if self.verbose:
                 print('forward %-30s %s -> %s' % (lname, list(input_size), list(output_size)))
 
+        #for name, blob in self.blobs.items():
+        #    print('%s device = %d' % (name, blob.data.get_device()))
+        
         if self.forward_data_only:
             odatas = [blob for blob in self.blobs.values()]
             return tuple(odatas)
@@ -594,6 +599,9 @@ class CaffeNet(nn.Module):
                 phase = layer['include']['phase']
                 lname = lname + '.' + phase
             ltype = layer['type']
+            if not lmap.has_key(lname):
+                i = i + 1
+                continue
             if ltype in ['Convolution', 'Deconvolution']:
                 print('load weights %s' % lname)
                 convolution_param = layer['convolution_param']
@@ -990,12 +998,13 @@ class CaffeNet(nn.Module):
 class ParallelCaffeNet(nn.Module):
     def __init__(self, caffe_module, device_ids):
         super(ParallelCaffeNet, self).__init__()
-
-        self.module = caffe_module
+        print('ParallelCaffeNet: device_ids = ', device_ids)
         self.device_ids = device_ids
-        self.parallel_model = nn.DataParallel(self.module, device_ids)
-    def forward(self):
-        self.module.set_forward_data_only(True)
-        inputs = self.module()
-        self.module.set_forward_net_only(True)
+        self.parallel_model = nn.DataParallel(caffe_module, device_ids)
+    def forward(self, x):
+        self.parallel_model.module.set_forward_data_only(True)
+        inputs = self.parallel_model.module()
+        inputs = [item.cuda() for item in inputs]
+        inputs = tuple(inputs)
+        self.parallel_model.module.set_forward_net_only(True)
         return self.parallel_model(*inputs)
