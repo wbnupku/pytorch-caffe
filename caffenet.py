@@ -634,7 +634,7 @@ class CaffeNet(nn.Module):
             elif ltype == 'InnerProduct':
                 print('load weights %s' % lname)
                 if type(self.models[lname]) == nn.Sequential:
-                    self.models[lname][1].weight.data.copy_(torch.from_numpy(np.array(lmap[lname].blobs[0].data)))
+                    self.models[lname][1].weight.data.copy_(torch.from_numpy(np.array(lmap[lname].blobs[0].data)).view_as(self.models[lname][1].weight))
                     if len(lmap[lname].blobs) > 1:
                         self.models[lname][1].bias.data.copy_(torch.from_numpy(np.array(lmap[lname].blobs[1].data)))
                 else:
