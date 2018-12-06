@@ -1,10 +1,11 @@
 # 2017.12.16 by xiaohang
+from __future__ import print_function
 from collections import OrderedDict
 import caffe.proto.caffe_pb2 as caffe_pb2
 
 def parse_caffemodel(caffemodel):
     model = caffe_pb2.NetParameter()
-    print 'Loading caffemodel: ', caffemodel
+    print('Loading caffemodel: ', caffemodel)
     with open(caffemodel, 'rb') as fp:
         model.ParseFromString(fp.read())
 
@@ -30,7 +31,7 @@ def parse_prototxt(protofile):
                 key, value = line.split(':')
                 key = key.strip()
                 value = value.strip().strip('"')
-                if block.has_key(key):
+                if key in block:
                     if type(block[key]) == list:
                         block[key].append(value)
                     else:
@@ -59,7 +60,7 @@ def parse_prototxt(protofile):
             key, value = line.split(':')
             key = key.strip()
             value = value.strip().strip('"')
-            if props.has_key(key):
+            if key in props:
                if type(props[key]) == list:
                    props[key].append(value)
                else:
@@ -142,27 +143,30 @@ def save_prototxt(net_info, protofile, region=True):
 
     def print_block(block_info, prefix, indent):
         blanks = ''.join([' ']*indent)
-        print >>fp, '%s%s {' % (blanks, prefix)
+        # print >>fp, '%s%s {' % (blanks, prefix)
+        print ('%s%s {' % (blanks, prefix), file=fp)
         for key,value in block_info.items():
             if type(value) == OrderedDict:
                 print_block(value, key, indent+4)
             elif type(value) == list:
                 for v in value:
-                    print >> fp, '%s    %s: %s' % (blanks, key, format_value(v))
+                    # print >> fp, '%s    %s: %s' % (blanks, key, format_value(v))
+                    print ('%s    %s: %s' % (blanks, key, format_value(v)), file=fp)
             else:
-                print >> fp, '%s    %s: %s' % (blanks, key, format_value(value))
-        print >> fp, '%s}' % blanks
+                print ('%s    %s: %s' % (blanks, key, format_value(value)), file=fp)
+        # print >> fp, '%s}' % blanks
+        print ('%s}' % blanks, file=fp)
         
     props = net_info['props']
-    print >> fp, 'name: \"%s\"' % props['name']
-    if props.has_key('input'):
-        print >> fp, 'input: \"%s\"' % props['input']
-    if props.has_key('input_dim'):
-        print >> fp, 'input_dim: %s' % props['input_dim'][0]
-        print >> fp, 'input_dim: %s' % props['input_dim'][1]
-        print >> fp, 'input_dim: %s' % props['input_dim'][2]
-        print >> fp, 'input_dim: %s' % props['input_dim'][3]
-    print >> fp, ''
+    print ('name: \"%s\"' % props['name'], file=fp)
+    if 'input' in props:
+        print ('input: \"%s\"' % props['input'], file=fp)
+    if 'input_dim' in props:
+        print ('input_dim: %s' % props['input_dim'][0], file=fp)
+        print ('input_dim: %s' % props['input_dim'][1], file=fp)
+        print ('input_dim: %s' % props['input_dim'][2], file=fp)
+        print ('input_dim: %s' % props['input_dim'][3], file=fp)
+    print ('', file=fp)
     layers = net_info['layers']
     for layer in layers:
         if layer['type'] != 'Region' or region == True:
@@ -181,7 +185,7 @@ def parse_solver(solverfile):
         items = line.split(':')
         key = items[0].strip()
         value = items[1].strip().strip('"')
-        if not solver.has_key(key):
+        if key not in solver:
             solver[key] = value
         elif not type(solver[key]) == list:
             solver[key] = [solver[key], value]
