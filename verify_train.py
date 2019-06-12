@@ -71,6 +71,7 @@ if __name__ == '__main__':
 
     time_caffe, caffe_blobs, caffe_params = forward_caffe(protofile, weightfile)
     data = caffe_blobs['data'].data
+    print(caffe_blobs)
     label = caffe_blobs['label'].data
     time_pytorch, pytorch_blobs, pytorch_models = forward_pytorch(protofile, weightfile, data, label)
 

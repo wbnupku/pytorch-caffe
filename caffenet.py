@@ -12,7 +12,6 @@ from collections import OrderedDict
 from prototxt import *
 import caffe
 import caffe.proto.caffe_pb2 as caffe_pb2
-from torch.legacy.nn import SpatialCrossMapLRN as SpatialCrossMapLRNOld
 from itertools import product as product
 from detection import Detection, MultiBoxLoss
 import inspect
@@ -252,6 +251,7 @@ class LRNFunc(Function):
         self.k = k
 
     def forward(self, input):
+        from torch.legacy.nn import SpatialCrossMapLRN as SpatialCrossMapLRNOld
         self.save_for_backward(input)
         self.lrn = SpatialCrossMapLRNOld(self.size, self.alpha, self.beta, self.k)
         self.lrn.type(input.type())
@@ -381,6 +381,7 @@ class CaffeNet(nn.Module):
         self.net_info = parse_prototxt(protofile)
         self.models = self.create_network(self.net_info, width, height, channels)
         for name,model in self.models.items():
+            print('mode and name', model, name)
             self.add_module(name, model)
 
         self.has_mean = False
